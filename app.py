@@ -30,7 +30,8 @@ app.layout = html.Div([
         id='electropherogram-plot',
         config={'modeBarButtonsToAdd': ['drawline']}
     ),
-    html.Div(id='integration-bounds', style={'margin-top': '20px'})
+    html.Div(id='integration-bounds', style={'margin-top': '20px'}),
+    dcc.Store(id='selected-points', data=[])  # Store per-user selected points
 ])
 
 # Function to parse CSV content
@@ -45,6 +46,7 @@ selected_points = []
 # Callback to update the plot
 @app.callback(
     Output('electropherogram-plot', 'figure'),
+    Output('selected-points', 'data'),  # Store user-specific selected points
     [Input('upload-data', 'contents'),
      Input('upload-data', 'filename'),
      Input('apply-axis', 'n_clicks'),
@@ -52,30 +54,29 @@ selected_points = []
     [State('x-min', 'value'),
      State('x-max', 'value'),
      State('y-min', 'value'),
-     State('y-max', 'value')]
+     State('y-max', 'value'),
+     State('selected-points', 'data')]  # Get user-specific selected points
 )
-def update_output(list_of_contents, list_of_names, apply_axis, click_data, x_min, x_max, y_min, y_max):
-    global selected_points
+def update_output(list_of_contents, list_of_names, apply_axis, click_data, 
+                  x_min, x_max, y_min, y_max, selected_points):
     fig = go.Figure()
     
-    data_traces = []
-    
-    if list_of_contents is not None:
+    if list_of_contents:
         for contents, name in zip(list_of_contents, list_of_names):
             df = parse_contents(contents)
             trace = go.Scatter(x=df.iloc[:, 0], y=df.iloc[:, 1], mode='lines', name=name)
             fig.add_trace(trace)
-            data_traces.append((df.iloc[:, 0], df.iloc[:, 1]))
-    
+
     # Capture integration points from clickData
     if click_data:
         x_clicked = click_data['points'][0]['x']
         y_clicked = click_data['points'][0]['y']
         selected_points.append((x_clicked, y_clicked))
-    
-    # Plot integration lines from selected points to y=0
+
+    # Plot integration lines from selected points
     for x, y in selected_points:
-        fig.add_trace(go.Scatter(x=[x, x], y=[0, y], mode='lines', line=dict(color='red', dash='dash'), name='Integration Bound'))
+        fig.add_trace(go.Scatter(x=[x, x], y=[0, y], mode='lines', 
+                                 line=dict(color='red', dash='dash'), name='Integration Bound'))
     
     axis_updates = {}
     if x_min is not None and x_max is not None:
@@ -87,18 +88,14 @@ def update_output(list_of_contents, list_of_names, apply_axis, click_data, x_min
         fig.update_layout(**axis_updates)
     
     fig.update_layout(title="Electropherograms", xaxis_title="Time", yaxis_title="Intensity")
-    return fig
+    
+    return fig, selected_points  # Return updated figure and store data
 
 @app.callback(
     Output('integration-bounds', 'children'),
-    Input('electropherogram-plot', 'clickData')
+    Input('selected-points', 'data')  # Read user-specific selected points
 )
-def update_bounds_display(click_data):
-    global selected_points
-    if click_data:
-        x_clicked = click_data['points'][0]['x']
-        y_clicked = click_data['points'][0]['y']
-        selected_points.append((x_clicked, y_clicked))
+def update_bounds_display(selected_points):
     return html.P(f"Integration Points: {selected_points}")
 
 if __name__ == '__main__':
