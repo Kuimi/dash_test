@@ -1,1 +1,0 @@
-mkvirtualenv dashappenv --python=/usr/bin/python3.6
